@@ -1,0 +1,59 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id         String   @id @default(uuid())
+  name       String
+  email      String   @unique
+  password   String?
+  provider   String   @default("credentials")
+  tasks      Task[]
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+}
+
+model Task {
+  id          Int              @id @default(autoincrement())
+  user_id     String
+  title       String
+  status      String          @default("not-started")
+  date        DateTime        @default(now())
+  important   Boolean         @default(false)
+  notes       String?
+  created_at  DateTime        @default(now())
+  updated_at  DateTime        @updatedAt
+  user        User            @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  links       TaskLink[]
+  attachments TaskAttachment[]
+}
+
+model TaskLink {
+  id         String   @id @default(uuid())
+  task_id    Int
+  title      String
+  url        String
+  created_at DateTime @default(now())
+  task       Task     @relation(fields: [task_id], references: [id], onDelete: Cascade)
+}
+
+model TaskAttachment {
+  id         String   @id @default(uuid())
+  task_id    Int
+  type       String
+  name       String
+  url        String
+  created_at DateTime @default(now())
+  task       Task     @relation(fields: [task_id], references: [id], onDelete: Cascade)
+}

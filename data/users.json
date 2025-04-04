@@ -1,0 +1,16 @@
+[
+  {
+    "id": "1tdi5f8jd0pfszxsrs59x",
+    "name": "Mina Rizk",
+    "email": "mina@gmail.com",
+    "password": "$2b$10$JqBA44I4heT9EgjfzPzpku.cm3yoY4VFbYQ/ASOyOb5lAiIJQIfNe",
+    "createdAt": "2025-04-04T14:49:20.106Z"
+  },
+  {
+    "id": "7ffhguvp2lb37k668kwi4",
+    "name": "mina",
+    "email": "mina2@gmail.com",
+    "password": "$2b$10$v3huQJft.RjydbCgp3rzp.f8iNXRtGx9/YRzppvjumLrMq/9WR7iG",
+    "createdAt": "2025-04-04T15:16:11.578Z"
+  }
+]

@@ -1,30 +1,31 @@
 "use client"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { CheckCircle, Calendar } from "lucide-react"
+import { CheckCircle, Calendar, Star } from "lucide-react"
 import { useAppContext } from "@/context/app-context"
+import { useAuth } from "@/context/auth-context"
 import { useState, useEffect } from "react"
 
 export function DashboardStats() {
   const { state } = useAppContext()
+  const { user } = useAuth()
   const [stats, setStats] = useState({ completed: 0, inProgress: 0, notStarted: 0 })
-
-  // Use a try-catch to safely access the context
-  // let contextStats = { completed: 0, inProgress: 0, notStarted: 0 }
-  // try {
-  //   const { state } = useAppContext()
-  //   contextStats = state.stats
-  // } catch (e) {
-  //   // Context not available yet (during SSR)
-  //   console.log("Context not available yet")
-  // }
+  const [importantCount, setImportantCount] = useState(0)
 
   // Update stats when context is available
   useEffect(() => {
     if (state) {
       setStats(state.stats)
+      
+      // Count important tasks for the current user
+      if (user && user.id && state.tasks) {
+        const userImportantTasks = state.tasks.filter(
+          task => task.user_id === user.id && task.important
+        );
+        setImportantCount(userImportantTasks.length);
+      }
     }
-  }, [state])
+  }, [state, user])
 
   return (
     <>
@@ -43,6 +44,8 @@ export function DashboardStats() {
         </CardContent>
       </Card>
 
+      {/* Remaining Tasks card removed as requested */}
+      {/* 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-sm font-medium">Remaining Tasks</CardTitle>
@@ -55,7 +58,20 @@ export function DashboardStats() {
           </p>
         </CardContent>
       </Card>
+      */}
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium">Important Tasks</CardTitle>
+          <Star className="h-4 w-4 text-yellow-500" fill="currentColor" />
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold">{importantCount}</div>
+          <p className="text-xs text-muted-foreground">
+            {importantCount > 0 ? `${importantCount} high priority tasks` : "No important tasks"}
+          </p>
+        </CardContent>
+      </Card>
     </>
   )
 }
-

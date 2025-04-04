@@ -5,7 +5,6 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Home, Calendar, BarChart2, User, LogOut } from "lucide-react"
 import { useAppContext } from "@/context/app-context"
-import { useSession, signOut } from "next-auth/react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,19 +18,12 @@ export default function AppNavbar() {
   const pathname = usePathname()
   const router = useRouter()
   const { state, dispatch } = useAppContext()
-  const { data: session } = useSession()
 
   // Don't show navbar on login or signup pages
   if (pathname === "/" || pathname === "/signup") return null
 
-  const handleLogout = async () => {
-    // Clear app context
+  const handleLogout = () => {
     dispatch({ type: "LOGOUT" })
-
-    // Sign out from NextAuth
-    await signOut({ redirect: false })
-
-    // Redirect to login page
     router.push("/")
   }
 
@@ -72,7 +64,7 @@ export default function AppNavbar() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuLabel>{session?.user?.name || "Account"}</DropdownMenuLabel>
+              <DropdownMenuLabel>{state.user ? state.user.name : "Account"}</DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleLogout} className="text-red-500 cursor-pointer">
                 <LogOut className="mr-2 h-4 w-4" />

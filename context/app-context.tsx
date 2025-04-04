@@ -2,7 +2,6 @@
 
 import type React from "react"
 import { createContext, useContext, useReducer, useEffect, useState } from "react"
-import { useSession } from "next-auth/react"
 
 // Define types
 export type TaskAttachment = {
@@ -27,6 +26,7 @@ export type Task = {
   notes?: string
   links?: TaskLink[]
   attachments?: TaskAttachment[]
+  user_id: string
 }
 
 type User = {
@@ -53,16 +53,54 @@ type AppAction =
   | { type: "TOGGLE_IMPORTANT"; payload: number }
   | { type: "LOGIN"; payload: User }
   | { type: "LOGOUT" }
-  | { type: "SYNC_TASKS"; payload: Task[] }
+  | { type: "SET_TASKS"; payload: Task[] }
 
 // Initial state
 const initialState: AppState = {
-  tasks: [],
+  tasks: [
+    {
+      id: 1,
+      title: "Complete project proposal",
+      status: "in-progress",
+      date: new Date(),
+      important: false,
+      notes: "Include sections on budget, timeline, and resources needed.",
+      links: [{ id: "l1", title: "Project Template", url: "https://example.com/template" }],
+      user_id: "",
+    },
+    {
+      id: 2,
+      title: "Schedule team meeting",
+      status: "not-started",
+      date: new Date(),
+      important: true,
+      notes: "Discuss quarterly goals and project assignments.",
+      user_id: "",
+    },
+    {
+      id: 3,
+      title: "Review client feedback",
+      status: "completed",
+      date: new Date(),
+      important: false,
+      notes: "Focus on UI/UX concerns raised in the latest feedback session.",
+      user_id: "",
+    },
+    {
+      id: 4,
+      title: "Update documentation",
+      status: "not-started",
+      date: new Date(),
+      important: false,
+      notes: "Update API documentation with new endpoints.",
+      user_id: "",
+    },
+  ],
   user: null,
   stats: {
-    completed: 0,
-    inProgress: 0,
-    notStarted: 0,
+    completed: 1,
+    inProgress: 1,
+    notStarted: 2,
   },
 }
 
@@ -78,14 +116,25 @@ const AppContext = createContext<AppContextType | undefined>(undefined)
 function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
     case "ADD_TASK":
+      // Get the current user ID from localStorage
+      const userId = localStorage.getItem('userId') || state.user?.id || "";
+      
+      // Create a new task with a unique ID and the current user's ID
       const newTask = {
         ...action.payload,
         id: state.tasks.length > 0 ? Math.max(...state.tasks.map((t) => t.id)) + 1 : 1,
+        user_id: userId, // Set user_id to current user's ID
       }
+      
+      console.log("Adding new task with user ID:", userId, newTask);
+      
+      // Add the new task to the tasks array
+      const tasksWithNewTask = [...state.tasks, newTask];
+      
       return {
         ...state,
-        tasks: [...state.tasks, newTask],
-        stats: calculateStats([...state.tasks, newTask]),
+        tasks: tasksWithNewTask,
+        stats: calculateStats(tasksWithNewTask),
       }
 
     case "UPDATE_TASK":
@@ -121,10 +170,11 @@ function appReducer(state: AppState, action: AppAction): AppState {
 
     case "LOGOUT":
       return {
-        ...initialState,
+        ...state,
+        user: null,
       }
 
-    case "SYNC_TASKS":
+    case "SET_TASKS":
       return {
         ...state,
         tasks: action.payload,
@@ -138,10 +188,13 @@ function appReducer(state: AppState, action: AppAction): AppState {
 
 // Helper function to calculate stats
 function calculateStats(tasks: Task[]) {
+  const userId = localStorage.getItem("userId")
+  const userTasks = userId ? tasks.filter((task) => task.user_id === userId) : tasks
+
   return {
-    completed: tasks.filter((t) => t.status === "completed").length,
-    inProgress: tasks.filter((t) => t.status === "in-progress").length,
-    notStarted: tasks.filter((t) => t.status === "not-started").length,
+    completed: userTasks.filter((t) => t.status === "completed").length,
+    inProgress: userTasks.filter((t) => t.status === "in-progress").length,
+    notStarted: userTasks.filter((t) => t.status === "not-started").length,
   }
 }
 
@@ -149,65 +202,195 @@ function calculateStats(tasks: Task[]) {
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(appReducer, initialState)
   const [isClient, setIsClient] = useState(false)
-  const { data: session } = useSession()
+  const [isInitialLoad, setIsInitialLoad] = useState(true)
+  const [lastAction, setLastAction] = useState<AppAction | null>(null)
 
   // Set isClient to true when component mounts (client-side only)
   useEffect(() => {
     setIsClient(true)
-  }, [])
-
-  // Sync user from session
-  useEffect(() => {
-    if (session?.user) {
-      dispatch({
-        type: "LOGIN",
-        payload: {
-          id: session.user.id,
-          name: session.user.name || "User",
-          email: session.user.email || "",
-          isLoggedIn: true,
-        },
-      })
+    
+    // Initialize userId in localStorage if not already set
+    if (typeof window !== 'undefined') {
+      const userId = localStorage.getItem('userId');
+      if (!userId && state.user?.id) {
+        localStorage.setItem('userId', state.user.id);
+        console.log("Initialized userId in localStorage:", state.user.id);
+      }
     }
-  }, [session])
+  }, [state.user])
+
+  // Handle API calls for actions
+  useEffect(() => {
+    if (!isClient || !lastAction || isInitialLoad) return;
+
+    const userId = localStorage.getItem('userId');
+    if (!userId) return;
+
+    switch (lastAction.type) {
+      case "ADD_TASK":
+        // Find the task that was just added (it will be the last one in the array)
+        const newTask = state.tasks[state.tasks.length - 1];
+        if (!newTask) return;
+
+        // Add task to database via API
+        fetch('/api/tasks', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            ...lastAction.payload,
+            user_id: userId
+          }),
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            console.log("Task added successfully via API:", data.task);
+          } else {
+            console.error("Failed to add task via API:", data.message);
+          }
+        })
+        .catch(error => {
+          console.error("Error adding task via API:", error);
+        });
+        break;
+
+      case "UPDATE_TASK":
+        // Update task in database via API
+        fetch('/api/tasks', {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(lastAction.payload),
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            console.log("Task updated successfully via API");
+          } else {
+            console.error("Failed to update task via API:", data.message);
+          }
+        })
+        .catch(error => {
+          console.error("Error updating task via API:", error);
+        });
+        break;
+
+      case "DELETE_TASK":
+        // Delete task from database via API
+        fetch(`/api/tasks?id=${lastAction.payload}`, {
+          method: 'DELETE',
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            console.log("Task deleted successfully via API");
+          } else {
+            console.error("Failed to delete task via API:", data.message);
+          }
+        })
+        .catch(error => {
+          console.error("Error deleting task via API:", error);
+        });
+        break;
+    }
+  }, [lastAction, isClient, isInitialLoad, state.tasks]);
+
+  // Intercept dispatch to track last action
+  const interceptedDispatch = (action: AppAction) => {
+    setLastAction(action);
+    dispatch(action);
+  };
+
+  // Load tasks from API when component mounts (only once)
+  useEffect(() => {
+    if (!isClient) return;
+    
+    // Check if user is authenticated
+    const userId = localStorage.getItem('userId');
+    if (!userId) return;
+    
+    console.log("Initial load of tasks from API");
+    
+    // Fetch tasks from API
+    fetch('/api/tasks')
+      .then(response => response.json())
+      .then(data => {
+        if (data.success && data.tasks) {
+          console.log("Loaded tasks from API:", data.tasks.length, "tasks");
+          
+          // Clear existing tasks first
+          // Then add each task from the API to the state
+          const tasksToAdd = data.tasks.map((task: any) => ({
+            ...task,
+            date: new Date(task.date)
+          }));
+          
+          // Update state directly with all tasks at once
+          dispatch({
+            type: "SET_TASKS",
+            payload: tasksToAdd
+          });
+          
+          setIsInitialLoad(false);
+        }
+      })
+      .catch(error => {
+        console.error("Error loading tasks from API:", error);
+        setIsInitialLoad(false);
+      });
+  }, [isClient]);
 
   // Persist state to localStorage (client-side only)
   useEffect(() => {
-    if (!isClient || !session?.user?.id) return
+    if (!isClient) return
 
     try {
-      const userKey = `appState-${session.user.id}`
-      const savedState = localStorage.getItem(userKey)
-
+      const savedState = localStorage.getItem("appState")
       if (savedState) {
         const parsedState = JSON.parse(savedState)
         // Convert string dates back to Date objects
-        const tasks = parsedState.tasks.map((task: any) => ({
+        parsedState.tasks = parsedState.tasks.map((task: any) => ({
           ...task,
           date: new Date(task.date),
         }))
 
-        // Sync tasks from localStorage
-        dispatch({ type: "SYNC_TASKS", payload: tasks })
+        // Initialize the reducer with the saved state
+        dispatch({ type: "LOGIN", payload: parsedState.user })
+
+        // Clear existing tasks before adding saved ones
+        // This prevents duplication of tasks
+        const userId = parsedState.user?.id
+        if (userId) {
+          localStorage.setItem("userId", userId)
+          console.log("Updated userId in localStorage from saved state:", userId);
+        }
       }
     } catch (error) {
       console.error("Error loading state from localStorage:", error)
     }
-  }, [isClient, session])
+  }, [isClient])
 
   // Save state to localStorage when it changes
   useEffect(() => {
-    if (!isClient || !session?.user?.id) return
+    if (!isClient) return
 
     try {
-      const userKey = `appState-${session.user.id}`
-      localStorage.setItem(userKey, JSON.stringify({ tasks: state.tasks }))
+      localStorage.setItem("appState", JSON.stringify(state))
+      
+      // If user is logged in, store userId in localStorage for easy access
+      if (state.user && state.user.id) {
+        localStorage.setItem('userId', state.user.id);
+        console.log("Saved userId to localStorage:", state.user.id);
+      }
     } catch (error) {
       console.error("Error saving state to localStorage:", error)
     }
-  }, [state.tasks, isClient, session])
+  }, [state, isClient])
 
-  return <AppContext.Provider value={{ state, dispatch }}>{children}</AppContext.Provider>
+  return <AppContext.Provider value={{ state, dispatch: interceptedDispatch }}>{children}</AppContext.Provider>
 }
 
 // Custom hook to use the context
@@ -218,4 +401,3 @@ export function useAppContext() {
   }
   return context
 }
-

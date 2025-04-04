@@ -15,9 +15,10 @@ type TaskItemProps = {
   task: Task
   onStatusChange: (status: string) => void
   onToggleImportant: () => void
+  onDelete: () => void
 }
 
-export function TaskItem({ task, onStatusChange, onToggleImportant }: TaskItemProps) {
+export function TaskItem({ task, onStatusChange, onToggleImportant, onDelete }: TaskItemProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [isExpanded, setIsExpanded] = useState(false)
   const { dispatch } = useAppContext()
@@ -200,10 +201,10 @@ export function TaskItem({ task, onStatusChange, onToggleImportant }: TaskItemPr
             onSubmit={handleEditTask}
             onCancel={() => setIsOpen(false)}
             submitLabel="Save Changes"
+            onDelete={onDelete}
           />
         </DialogContent>
       </Dialog>
     </>
   )
 }
-

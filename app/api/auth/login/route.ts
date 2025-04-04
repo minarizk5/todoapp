@@ -1,28 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createUser } from "@/lib/auth-utils";
-import crypto from 'crypto';
+import { verifyCredentials } from "@/lib/auth-utils";
 
 export async function POST(req: NextRequest) {
   try {
     // Parse request body
     const body = await req.json();
-    const { name, email, password } = body;
+    const { email, password } = body;
 
     // Validate input
-    if (!name || !email || !password) {
+    if (!email || !password) {
       return NextResponse.json(
-        { success: false, message: 'Name, email, and password are required' },
+        { success: false, message: 'Email and password are required' },
         { status: 400 }
       );
     }
 
-    // Create user
-    const result = await createUser({ name, email, password });
+    // Verify credentials
+    const result = await verifyCredentials(email, password);
     
     if (!result.success) {
       return NextResponse.json(
         { success: false, message: result.message },
-        { status: 400 }
+        { status: 401 }
       );
     }
 
@@ -32,8 +31,8 @@ export async function POST(req: NextRequest) {
     // Create response
     const response = NextResponse.json({
       success: true,
-      message: 'User created successfully',
-      userId: result.userId
+      message: 'Login successful',
+      user: result.user
     });
     
     // Set cookies in the response
@@ -48,7 +47,7 @@ export async function POST(req: NextRequest) {
     
     response.cookies.set({
       name: 'user_id',
-      value: result.userId || '',
+      value: result.user?.id || '',
       httpOnly: true,
       path: '/',
       maxAge: 60 * 60 * 24 * 7, // 7 days
@@ -57,9 +56,9 @@ export async function POST(req: NextRequest) {
 
     return response;
   } catch (error) {
-    console.error('Signup error:', error);
+    console.error('Login error:', error);
     return NextResponse.json(
-      { success: false, message: 'An error occurred during signup' },
+      { success: false, message: 'An error occurred during login' },
       { status: 500 }
     );
   }

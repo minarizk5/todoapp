@@ -1,72 +1,37 @@
-import { supabase } from "./supabase"
-import bcrypt from "bcryptjs"
+import bcrypt from 'bcryptjs';
+import { NextRequest } from 'next/server';
+import { v4 as uuidv4 } from 'uuid';
 
-export async function createUser(userData: {
-  name: string
-  email: string
-  password: string
-}) {
-  try {
-    // Hash the password
-    const hashedPassword = await bcrypt.hash(userData.password, 10)
-
-    // Check if user already exists
-    const { data: existingUser, error: queryError } = await supabase
-      .from("users")
-      .select("*")
-      .eq("email", userData.email)
-      .single()
-
-    if (queryError && !queryError.message.includes("No rows found")) {
-      console.error("Error checking existing user:", queryError)
-      return { success: false, error: "Database error" }
-    }
-
-    if (existingUser) {
-      return { success: false, error: "User already exists" }
-    }
-
-    // Create new user
-    const { data, error } = await supabase
-      .from("users")
-      .insert([
-        {
-          name: userData.name,
-          email: userData.email,
-          password: hashedPassword,
-          provider: "credentials",
-        },
-      ])
-      .select()
-
-    if (error) {
-      console.error("Error creating user:", error)
-      return { success: false, error: error.message }
-    }
-
-    return { success: true, data }
-  } catch (error: any) {
-    console.error("Error in createUser:", error)
-    return { success: false, error: error.message || "Failed to create user" }
-  }
+// Helper function to generate a unique ID
+function generateId() {
+  return uuidv4();
 }
 
-export async function getUserByEmail(email: string) {
-  try {
-    const { data, error } = await supabase.from("users").select("*").eq("email", email).single()
+// Define the User type
+export type User = {
+  id: string;
+  name: string;
+  email: string;
+  password: string;
+};
 
-    if (error) {
-      if (error.message.includes("No rows found")) {
-        return null
-      }
-      console.error("Error getting user by email:", error)
-      return null
-    }
+// Client-side authentication functions
+// These functions don't use fs and are safe to import in client components
 
-    return data
-  } catch (error) {
-    console.error("Error in getUserByEmail:", error)
-    return null
+// Check if user is authenticated (for middleware)
+export function isUserAuthenticated(request: NextRequest) {
+  const authToken = request.cookies.get('auth_token')?.value;
+  const userId = request.cookies.get('user_id')?.value;
+  
+  console.log('Auth check - token:', authToken);
+  console.log('Auth check - userId:', userId);
+  
+  if (!authToken || !userId) {
+    console.log('Auth check failed: Missing token or userId');
+    return false;
   }
+  
+  // We only check if the cookies exist, actual validation happens in API routes
+  console.log('Auth check passed: User is authenticated');
+  return true;
 }
-

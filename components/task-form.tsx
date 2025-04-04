@@ -17,9 +17,10 @@ interface TaskFormProps {
   onCancel: () => void
   initialData?: Task
   submitLabel?: string
+  onDelete?: () => void
 }
 
-export function TaskForm({ onSubmit, onCancel, initialData, submitLabel = "Add Task" }: TaskFormProps) {
+export function TaskForm({ onSubmit, onCancel, initialData, submitLabel = "Add Task", onDelete }: TaskFormProps) {
   const [taskTitle, setTaskTitle] = useState(initialData?.title || "")
   const [date, setDate] = useState<Date | undefined>(initialData?.date || new Date())
   const [notes, setNotes] = useState(initialData?.notes || "")
@@ -29,7 +30,7 @@ export function TaskForm({ onSubmit, onCancel, initialData, submitLabel = "Add T
   const [newLinkUrl, setNewLinkUrl] = useState("")
   const [showLinkForm, setShowLinkForm] = useState(false)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
     if (!taskTitle.trim()) return
@@ -37,7 +38,13 @@ export function TaskForm({ onSubmit, onCancel, initialData, submitLabel = "Add T
     // Capitalize first letter
     const capitalizedTitle = taskTitle.charAt(0).toUpperCase() + taskTitle.slice(1)
 
-    onSubmit({
+    // Get user ID from localStorage if available
+    const userId = typeof window !== 'undefined' ? localStorage.getItem('userId') || '' : '';
+    
+    console.log("Submitting task with user ID:", userId);
+
+    // Create the task object
+    const taskData = {
       title: capitalizedTitle,
       date: date || new Date(),
       status: initialData?.status || "not-started",
@@ -45,7 +52,12 @@ export function TaskForm({ onSubmit, onCancel, initialData, submitLabel = "Add T
       notes: notes || undefined,
       links: links.length > 0 ? links : undefined,
       attachments: attachments.length > 0 ? attachments : undefined,
-    })
+      user_id: initialData?.user_id || userId,
+    };
+
+    // Pass the task to the onSubmit handler
+    // The AppContext will handle the API call
+    onSubmit(taskData);
   }
 
   const addLink = () => {
@@ -233,6 +245,16 @@ export function TaskForm({ onSubmit, onCancel, initialData, submitLabel = "Add T
       </div>
 
       <div className="flex justify-end space-x-2 pt-2">
+        {initialData && onDelete && (
+          <Button 
+            type="button" 
+            variant="destructive" 
+            onClick={onDelete}
+            className="mr-auto"
+          >
+            Delete Task
+          </Button>
+        )}
         <Button type="button" variant="outline" onClick={onCancel}>
           Cancel
         </Button>
@@ -241,4 +263,3 @@ export function TaskForm({ onSubmit, onCancel, initialData, submitLabel = "Add T
     </form>
   )
 }
-

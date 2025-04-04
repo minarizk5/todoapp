@@ -2,70 +2,99 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { useAppContext } from "@/context/app-context"
+import { useAppContext, type Task } from "@/context/app-context"
+import { useAuth } from "@/context/auth-context"
 import { useState, useEffect } from "react"
+import { format, subMonths, startOfMonth, endOfMonth, isWithinInterval, subWeeks, startOfWeek, endOfWeek, subYears, startOfYear, endOfYear } from "date-fns"
 
 export function MonthlySummary() {
   const [stats, setStats] = useState({ completed: 0, inProgress: 0, notStarted: 0 })
   const [viewType, setViewType] = useState("monthly")
-  const { state } = useAppContext() // Moved useAppContext call outside try-catch
+  const [chartData, setChartData] = useState<Array<{ label: string, completed: number }>>([])
+  const { state } = useAppContext()
+  const { user } = useAuth()
 
-  // Initialize contextStats with default values
-  let contextStats = { completed: 0, inProgress: 0, notStarted: 0 }
-
-  // Update contextStats based on context, but don't rely on try-catch
-  if (state && state.stats) {
-    contextStats = state.stats
-  } else {
-    console.log("Context not available yet")
-  }
-
-  // Update stats when context is available
+  // Calculate stats directly from tasks
   useEffect(() => {
-    setStats(contextStats)
-  }, [contextStats])
+    if (!state?.tasks || !user?.id) return;
+    
+    // Ensure we only get tasks for the current user
+    const userTasks = state.tasks.filter((task: Task) => task.user_id === user.id);
+    
+    const completedTasks = userTasks.filter((task: Task) => task.status === "completed").length;
+    const inProgressTasks = userTasks.filter((task: Task) => task.status === "in-progress").length;
+    const notStartedTasks = userTasks.filter((task: Task) => task.status === "not-started").length;
+    
+    setStats({
+      completed: completedTasks,
+      inProgress: inProgressTasks,
+      notStarted: notStartedTasks
+    });
+    
+    // Calculate chart data
+    let data: Array<{ label: string, completed: number }> = [];
+    const now = new Date();
 
-  // Generate monthly data based on tasks
-  const generateMonthlyData = () => {
-    const months = [
-      "January",
-      "February",
-      "March",
-      "April",
-      "May",
-      "June",
-      "July",
-      "August",
-      "September",
-      "October",
-      "November",
-      "December",
-    ]
-    const currentMonth = new Date().getMonth()
-
-    // For demo purposes, we'll show the last 6 months
-    const relevantMonths = months.slice(Math.max(0, currentMonth - 5), currentMonth + 1)
-
-    return relevantMonths.map((month, index) => {
-      // In a real app, you would filter tasks by month and calculate these values
-      return {
-        month,
-        completed: Math.max(5, stats.completed + index),
+    if (viewType === "weekly") {
+      for (let i = 6; i >= 0; i--) {
+        const weekStart = startOfWeek(subWeeks(now, i));
+        const weekEnd = endOfWeek(subWeeks(now, i));
+        const weekLabel = `Week ${format(weekStart, "d/M")}`;
+        
+        const completedCount = userTasks.filter((task: Task) => 
+          task.status === "completed" && 
+          isWithinInterval(new Date(task.date), { start: weekStart, end: weekEnd })
+        ).length;
+        
+        data.push({ label: weekLabel, completed: completedCount });
       }
-    })
-  }
+    } else if (viewType === "monthly") {
+      for (let i = 5; i >= 0; i--) {
+        const monthDate = subMonths(now, i);
+        const monthStart = startOfMonth(monthDate);
+        const monthEnd = endOfMonth(monthDate);
+        const monthLabel = format(monthDate, "MMM");
+        
+        const completedCount = userTasks.filter((task: Task) => 
+          task.status === "completed" && 
+          isWithinInterval(new Date(task.date), { start: monthStart, end: monthEnd })
+        ).length;
+        
+        data.push({ label: monthLabel, completed: completedCount });
+      }
+    } else if (viewType === "yearly") {
+      for (let i = 4; i >= 0; i--) {
+        const yearDate = subYears(now, i);
+        const yearStart = startOfYear(yearDate);
+        const yearEnd = endOfYear(yearDate);
+        const yearLabel = format(yearDate, "yyyy");
+        
+        const completedCount = userTasks.filter((task: Task) => 
+          task.status === "completed" && 
+          isWithinInterval(new Date(task.date), { start: yearStart, end: yearEnd })
+        ).length;
+        
+        data.push({ label: yearLabel, completed: completedCount });
+      }
+    }
 
-  const monthlyData = generateMonthlyData()
+    setChartData(data);
+  }, [state?.tasks, user?.id, viewType]);
 
-  // Find the maximum value for scaling
-  const maxCompleted = Math.max(...monthlyData.map((item) => item.completed))
+  // Calculate derived stats
+  const totalTasks = stats.completed + stats.inProgress + stats.notStarted;
+  const completionRate = totalTasks > 0 ? Math.round((stats.completed / totalTasks) * 100) : 0;
+  const maxCompleted = Math.max(1, ...chartData.map(item => item.completed));
+  const averageTasks = chartData.length > 0 
+    ? Math.round(chartData.reduce((sum, item) => sum + item.completed, 0) / chartData.length) 
+    : 0;
 
   return (
     <div className="space-y-6">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Task Completion</CardTitle>
-          <Select defaultValue="monthly" onValueChange={setViewType}>
+          <Select value={viewType} onValueChange={setViewType}>
             <SelectTrigger className="w-[180px]">
               <SelectValue placeholder="View" />
             </SelectTrigger>
@@ -79,13 +108,13 @@ export function MonthlySummary() {
         <CardContent>
           <div className="h-[300px] w-full">
             <div className="flex items-end h-[250px] w-full gap-2">
-              {monthlyData.map((item, index) => (
+              {chartData.map((item, index) => (
                 <div key={index} className="flex flex-col items-center flex-1">
                   <div
                     className="w-full bg-blue-500 rounded-t-md transition-all duration-500 ease-in-out hover:bg-blue-600"
                     style={{ height: `${(item.completed / maxCompleted) * 100}%` }}
                   ></div>
-                  <span className="text-xs mt-2">{item.month}</span>
+                  <span className="text-xs mt-2">{item.label}</span>
                 </div>
               ))}
             </div>
@@ -106,14 +135,16 @@ export function MonthlySummary() {
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="border rounded-lg p-4">
-                  <p className="text-sm text-muted-foreground">Average Tasks per Month</p>
-                  <p className="text-2xl font-bold">
-                    {(monthlyData.reduce((acc, item) => acc + item.completed, 0) / monthlyData.length).toFixed(1)}
+                  <p className="text-sm text-muted-foreground">
+                    Average Tasks per {viewType === "weekly" ? "Week" : viewType === "monthly" ? "Month" : "Year"}
                   </p>
+                  <p className="text-2xl font-bold">{averageTasks}</p>
                 </div>
                 <div className="border rounded-lg p-4">
-                  <p className="text-sm text-muted-foreground">Total Tasks (YTD)</p>
-                  <p className="text-2xl font-bold">{monthlyData.reduce((acc, item) => acc + item.completed, 0)}</p>
+                  <p className="text-sm text-muted-foreground">
+                    Total Tasks ({viewType === "weekly" ? "7 Weeks" : viewType === "monthly" ? "6 Months" : "5 Years"})
+                  </p>
+                  <p className="text-2xl font-bold">{totalTasks}</p>
                 </div>
               </div>
             </div>
@@ -129,27 +160,27 @@ export function MonthlySummary() {
               <div className="border rounded-lg p-4">
                 <p className="text-sm text-muted-foreground">Completion Rate</p>
                 <div className="flex items-center space-x-2">
-                  <p className="text-2xl font-bold">
-                    {stats.completed > 0
-                      ? Math.round((stats.completed / (stats.completed + stats.inProgress + stats.notStarted)) * 100)
-                      : 0}
-                    %
-                  </p>
-                  <span className="text-xs text-green-600">↑ 3%</span>
+                  <p className="text-2xl font-bold">{completionRate}%</p>
                 </div>
                 <div className="w-full h-2 bg-gray-200 rounded-full mt-2">
                   <div
                     className="h-full bg-green-500 rounded-full"
-                    style={{
-                      width: `${
-                        stats.completed > 0
-                          ? Math.round(
-                              (stats.completed / (stats.completed + stats.inProgress + stats.notStarted)) * 100,
-                            )
-                          : 0
-                      }%`,
-                    }}
+                    style={{ width: `${completionRate}%` }}
                   ></div>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="border rounded-lg p-3">
+                  <p className="text-xs text-muted-foreground">Completed</p>
+                  <p className="text-xl font-bold text-green-600">{stats.completed}</p>
+                </div>
+                <div className="border rounded-lg p-3">
+                  <p className="text-xs text-muted-foreground">In Progress</p>
+                  <p className="text-xl font-bold text-blue-600">{stats.inProgress}</p>
+                </div>
+                <div className="border rounded-lg p-3">
+                  <p className="text-xs text-muted-foreground">Not Started</p>
+                  <p className="text-xl font-bold text-gray-600">{stats.notStarted}</p>
                 </div>
               </div>
             </div>
@@ -159,4 +190,3 @@ export function MonthlySummary() {
     </div>
   )
 }
-
